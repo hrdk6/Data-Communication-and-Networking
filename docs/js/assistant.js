@@ -724,7 +724,8 @@
   document.addEventListener('selectionchange', U.debounce(onSel, 220));
   window.addEventListener('scroll', U.debounce(() => { if (selBtn && !selBtn.hidden) onSel(); }, 120), { passive: true });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && isOpen() && !document.querySelector('.search-dlg.open')) closeDrawer();
+    // Esc inside the search dialog belongs to the search box, not the assistant
+    if (e.key === 'Escape' && isOpen() && !document.querySelector('.search-dlg.open') && !(e.target.closest && e.target.closest('.search-dlg'))) closeDrawer();
   });
   function boot() {
     ensureUI();
