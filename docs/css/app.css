@@ -161,6 +161,17 @@ b, strong { font-weight: 640; }
   .search-trigger { min-width: 38px; }
   .search-trigger .label, .search-trigger kbd, .brand-sub { display: none; }
 }
+@media (max-width: 440px) {
+  .topbar { gap: 8px; }
+  #theme-label { display: none; }
+  #theme-btn { padding: 0; }
+  .brand { gap: 8px; }
+  .brand-name { font-size: .98rem; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (max-width: 370px) {
+  .brand-name { font-size: .9rem; font-stretch: 104%; }
+  .brand-mark { width: 26px; height: 26px; }
+}
 
 /* ---------- shell ---------- */
 .shell {

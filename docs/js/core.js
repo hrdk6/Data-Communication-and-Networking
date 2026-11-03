@@ -408,7 +408,7 @@
     var eb = U.el('div', { class: 'eyebrow' });
     if (ch.part !== 'X') eb.appendChild(U.el('span', { text: 'Chapter ' + ch.num }));
     if (ch.unit) eb.appendChild(U.el('span', { text: '· ' + ch.unit }));
-    eb.appendChild(U.el('span', { class: 'layer-pill', text: '· ' + (LAYERS[ch.layer] ? LAYERS[ch.layer].name : '') }));
+    eb.appendChild(U.el('span', { class: 'layer-pill', text: (eb.childNodes.length ? '· ' : '') + (LAYERS[ch.layer] ? LAYERS[ch.layer].name : '') }));
     head.appendChild(eb);
     var h1 = U.el('h1', { tabindex: '-1', text: ch.title });
     head.appendChild(h1);
