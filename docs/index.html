@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Signal to Socket</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A complete, interactive study guide for Data Communication and Networking (BCS502): every unit and module, 3D labs, solved numericals and IA question bank.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<script>
+  (function () { try { var t = JSON.parse(localStorage.getItem('dcn-theme') || '"system"'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+</script>
+</head>
+<body>
+<header class="topbar">
+  <button class="icon-btn menu-btn" id="menu-btn" type="button" aria-label="Open chapter list">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+  <a class="brand" href="#home" aria-label="Signal to Socket home">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="1.5" y="1.5" width="29" height="29" rx="7" fill="none" stroke="var(--ink)" stroke-width="2"/>
+      <path d="M5 21h4V11h5v10h4V11h3" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="24.5" cy="16" r="3.6" fill="none" stroke="var(--ink)" stroke-width="2"/>
+      <path d="M23.3 15v2M25.7 15v2" stroke="var(--ink)" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    <span class="brand-text"><span class="brand-name">Signal to Socket</span><span class="brand-sub">DCN · BCS502 study guide</span></span>
+  </a>
+  <span class="spacer"></span>
+  <button class="icon-btn search-trigger" type="button" data-open-search aria-label="Search all chapters">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+    <span class="label">Search topics, formulas…</span><kbd>/</kbd>
+  </button>
+  <button class="icon-btn ask-btn" id="ask-btn" type="button" data-open-assistant aria-controls="ai-drawer" aria-expanded="false" aria-label="Open the study assistant">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-8l-5 4v-4H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M12 6.6l1 2.4 2.4 1-2.4 1-1 2.4-1-2.4-2.4-1 2.4-1z" fill="currentColor" stroke="none"/></svg>
+    <span class="label">Ask</span>
+  </button>
+  <button class="icon-btn" id="theme-btn" type="button" aria-label="Change theme">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+    <span id="theme-label" class="small">Auto</span>
+  </button>
+</header>
+<div class="scrim" id="scrim"></div>
+<div class="shell">
+  <nav class="sidenav" id="sidenav" aria-label="Chapters"></nav>
+  <main class="main" id="main">
+    <div class="view" id="view">
+      <noscript><p>This guide needs JavaScript turned on to show its chapters and labs.</p></noscript>
+    </div>
+  </main>
+  <aside class="toc" id="toc" aria-label="On this page"></aside>
+</div>
+
+<div class="search-dlg" id="search-dlg" role="dialog" aria-modal="true" aria-label="Search">
+  <div class="search-box">
+    <label for="search-input" class="sr-only">Search</label>
+    <input id="search-input" type="search" placeholder="Search every chapter… (Esc to close)" autocomplete="off" spellcheck="false">
+    <div class="search-results" id="search-results"></div>
+  </div>
+</div>
+
+<template id="tpl-home">
+  <section class="hero">
+    <div class="hero-copy">
+      <div class="eyebrow">Data Communication &amp; Networking · BCS502 · BMSIT&amp;M</div>
+      <h1>Signal to Socket</h1>
+      <p class="lede">Your whole DCN syllabus in one place, from a sine wave on a copper pair to a socket on a web server. Every topic is written the way examiners mark it, every hard idea has a lab you can play with, and every IA question has a model answer.</p>
+      <div class="hero-ctas">
+        <a class="btn" href="#c1">Start with Chapter 1</a>
+        <a class="btn ghost" href="#questions">IA question bank</a>
+        <a class="btn ghost" href="#formulas">Formula sheet</a>
+      </div>
+      <form class="hero-ask" data-ask-form role="search" aria-label="Ask the study assistant">
+        <input type="text" name="q" placeholder="Ask anything in your syllabus…" aria-label="Ask the study assistant" autocomplete="off">
+        <button class="btn" type="submit">Ask</button>
+      </form>
+      <div class="stat-row">
+        <span><b>13</b>chapters</span>
+        <span><b data-topic-count>—</b>topics</span>
+        <span><b>65</b>interactive labs</span>
+        <span><b data-overall>0%</b>revised so far</span>
+      </div>
+    </div>
+    <figure class="lab lab-3d" data-scene="stack" data-mode="hero">
+      <figcaption><span class="ttl">The syllabus as a protocol stack</span><span class="cap">Drag to orbit · click a layer to open its chapters</span></figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="section-title">
+      <h2>Syllabus map</h2>
+      <p>The course climbs the network stack. Physical-layer chapters come first, then data link, network, transport and application. The bar under each chapter fills as you mark its topics revised.</p>
+    </div>
+    <div class="stackmap" id="stackmap"></div>
+  </section>
+
+  <section>
+    <div class="section-title">
+      <h2>Exam radar</h2>
+      <p>These are the questions your internal assessments actually asked, taken from the IA-1 answer scheme (25 Nov 2024) and the IA-2 important-questions list in your files. Each link opens the topic with a ready model answer.</p>
+    </div>
+    <div class="radar">
+      <div class="card">
+        <h4>IA-1 · Modules 1–2 (40 marks)</h4>
+        <ul>
+          <li><a href="#c1-datacomm">Importance and characteristics of data communication</a> <span class="chip hot">Q1a</span></li>
+          <li><a href="#c2-layering">Benefits of protocol layering</a> <span class="chip hot">Q1b</span></li>
+          <li><a href="#c4-schemes">NRZ, NRZ-L, NRZ-I, RZ, Manchester for 1011001011</a> <span class="chip hot">Q2a</span></li>
+          <li><a href="#c3-impairment">Attenuation, noise, delay distortion</a> <span class="chip hot">Q2b</span></li>
+          <li><a href="#c7-crc">CRC encoding and checking (divisor 1011)</a> <span class="chip hot">Q3a</span></li>
+          <li><a href="#c4-rates">Bit rate vs baud rate numerical</a> <span class="chip hot">Q3b</span></li>
+          <li><a href="#c8-gbn">Go-Back-N in three scenarios</a> <span class="chip hot">Q4a</span></li>
+          <li><a href="#c3-limits">Shannon capacity of a 3.4 kHz line</a> <span class="chip hot">Q4b</span></li>
+          <li><a href="#c4-pcm">Why PCM needs quantization</a> <span class="chip hot">Q5a</span></li>
+          <li><a href="#c1-campus">Topology for a university campus</a> <span class="chip hot">Q5b</span></li>
+          <li><a href="#c2-osi">OSI layers and troubleshooting</a> <span class="chip hot">Q6a</span></li>
+          <li><a href="#c9-random">Pure vs slotted ALOHA; vulnerable time</a> <span class="chip hot">Q6b · Q8b</span></li>
+          <li><a href="#c8-arq">Stop-and-Wait ARQ</a> <span class="chip hot">Q7a</span></li>
+          <li><a href="#c10-classful">Classful vs classless addressing</a> <span class="chip hot">Q7b</span></li>
+          <li><a href="#c8-ppp">PPP frame and transition phases</a> <span class="chip hot">Q8a</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>IA-2 · Modules 3–5 (important list)</h4>
+        <ul>
+          <li><a href="#c11-ls">Problems on Dijkstra (link state)</a> <span class="chip hot">Q1</span></li>
+          <li><a href="#c11-dv">Problems on Bellman-Ford (distance vector)</a> <span class="chip hot">Q1</span></li>
+          <li><a href="#c12-conn">TCP three-way handshake: establishment, data transfer, termination</a> <span class="chip hot">Q2</span></li>
+          <li><a href="#c13-paradigms">Client-server vs peer-to-peer vs hybrid</a> <span class="chip hot">Q3</span></li>
+          <li><a href="#c13-email">SMTP</a> and <a href="#c13-dns">DNS</a> <span class="chip hot">Q4</span></li>
+          <li><a href="#c12-vs">Advantages of TCP over UDP</a>, <a href="#c12-udp">UDP segment</a> <span class="chip hot">Q5</span></li>
+        </ul>
+        <h4 style="margin-top:.6rem">Past VTU questions quoted in your slides</h4>
+        <ul>
+          <li><a href="#c1-components">Data communication and its components</a> <span class="chip">Jan 20 · Jan 19 · Jul 19</span></li>
+          <li><a href="#c1-mesh">Mesh of 5 devices: links and ports</a> <span class="chip">Jan 18</span></li>
+          <li><a href="#c1-dataflow">Data flow: simplex, half and full duplex</a> <span class="chip">Jan 20 · Jul 19</span></li>
+          <li><a href="#c1-criteria">Network criteria</a> <span class="chip">Jul 18</span></li>
+          <li><a href="#c1-types">What decides LAN or WAN</a> <span class="chip">Jul 19</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title">
+      <h2>How to use this guide</h2>
+      <p>Three passes through the syllabus work better than one slow read.</p>
+    </div>
+    <div class="passes">
+      <div class="pass"><h4>Learn</h4><p>Read a chapter top to bottom and play with every lab until the picture makes sense. Tick <b>Mark revised</b> after each topic.</p></div>
+      <div class="pass"><h4>Practise</h4><p>Solve the numericals on the formula sheet without peeking, then check each step. Take the chapter self-test.</p></div>
+      <div class="pass"><h4>Revise</h4><p>Two days before the exam, read only the exam-tip boxes, model answers and the formula sheet. Draw every diagram once from memory.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title">
+      <h2>Toolkit</h2>
+      <p>Revision tools that cut across chapters.</p>
+    </div>
+    <div class="tool-grid">
+      <a class="tool-card ai-card" href="#assistant"><b>Study assistant</b><span>Ask any question and get an answer written from your notes, with a clickable source for every point.</span></a>
+      <a class="tool-card" href="#formulas"><b>Formula sheet &amp; numericals</b><span>Every formula with units, plus calculators that show the working.</span></a>
+      <a class="tool-card" href="#questions"><b>Exam question bank</b><span>IA-1 solved paper, IA-2 important questions and likely long answers.</span></a>
+      <a class="tool-card" href="#quiz"><b>Mixed test</b><span>195 shuffled MCQs across all chapters, with the reasoning after each answer.</span></a>
+      <a class="tool-card" href="#lab"><b>Lab manual</b><span>Network commands, cable crimping, subnetting, the NS2 congestion-window program and the BMSIT campus network.</span></a>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p>Built only from the files in this repository: the Unit 1–3 slides, the IA-1 and IA-2 folders (BMSIT module slides, DSATM and CEC notes, handwritten notes, the IA-1 answer scheme), the complete BCS502 notes, the lab handouts, the two campus network survey reports and the Kurose–Ross textbook for reference. Topics outside those files are left out on purpose.</p>
+    <p>Progress and quiz scores stay in this browser only.</p>
+  </footer>
+</template>
+
+<script src="vendor/three.min.js"></script>
+<script src="js/core.js"></script>
+<script src="js/w-phy.js"></script>
+<script src="js/w-dll.js"></script>
+<script src="js/w-net.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/ch/c01.js"></script>
+<script src="js/ch/c02.js"></script>
+<script src="js/ch/c03.js"></script>
+<script src="js/ch/c04.js"></script>
+<script src="js/ch/c05.js"></script>
+<script src="js/ch/c06.js"></script>
+<script src="js/ch/c07.js"></script>
+<script src="js/ch/c08.js"></script>
+<script src="js/ch/c09.js"></script>
+<script src="js/ch/c10.js"></script>
+<script src="js/ch/c11.js"></script>
+<script src="js/ch/c12.js"></script>
+<script src="js/ch/c13.js"></script>
+<script src="js/ch/x-formulas.js"></script>
+<script src="js/ch/x-questions.js"></script>
+<script src="js/ch/x-quiz.js"></script>
+<script src="js/ch/x-lab.js"></script>
+<script src="js/ch/x-assistant.js"></script>
+<script src="js/rag.js"></script>
+<script src="js/assistant.js"></script>
+</body>
+</html>
