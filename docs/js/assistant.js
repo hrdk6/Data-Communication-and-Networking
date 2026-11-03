@@ -390,7 +390,7 @@
       cp.addEventListener('click', () => copy(m, cp));
       act.appendChild(cp);
     }
-    if (m.via === 'claude' || m.quiz || m.error) act.appendChild(retryBtn(m, m.quiz ? 'New questions' : 'Regenerate'));
+    if (!m.error && (m.via === 'claude' || m.quiz)) act.appendChild(retryBtn(m, m.quiz ? 'New questions' : 'Regenerate'));
     if (act.childNodes.length) x.appendChild(act);
   }
   function retryBtn(m, label) {
