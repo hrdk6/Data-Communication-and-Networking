@@ -508,7 +508,9 @@
       window.scrollTo(0, 0);
       if (focusEl) { try { focusEl.focus({ preventScroll: true }); } catch (e) { focusEl.focus(); } }
     }
+    try { document.dispatchEvent(new CustomEvent('dcn:route', { detail: { id: chId, target: target } })); } catch (e) { /* old browser */ }
   }
+  DCN.currentChapter = function () { return currentChapter; };
   var settleTimers = [];
   function scrollToId(id) {
     var el = document.getElementById(id);
@@ -591,14 +593,25 @@
     dlg.addEventListener('click', function (e) { if (e.target === dlg) close(); });
     inp.addEventListener('input', U.debounce(function () {
       var r = doSearch(inp.value); sel = -1;
-      if (!r.length) { res.innerHTML = '<div class="search-empty">' + (inp.value.trim().length < 2 ? 'Type at least two letters.' : 'No match. Try a shorter word, e.g. <b>crc</b> or <b>aloha</b>.') + '</div>'; return; }
+      var askRow = null;
+      if (DCN.assistant && inp.value.trim().length >= 3) {
+        var qv = inp.value.trim();
+        askRow = U.el('a', { href: '#assistant', class: 'ask-row' });
+        askRow.innerHTML = '<span class="where">Study assistant</span><span class="t">Ask: “' + esc(qv) + '”</span><span class="s">Get an answer written from your notes, with sources.</span>';
+        askRow.addEventListener('click', function (ev) { ev.preventDefault(); close(); DCN.assistant.open({ q: qv, send: true }); });
+      }
+      if (!r.length) { res.innerHTML = '<div class="search-empty">' + (inp.value.trim().length < 2 ? 'Type at least two letters.' : 'No match. Try a shorter word, e.g. <b>crc</b> or <b>aloha</b>, or ask the assistant.') + '</div>'; if (askRow) res.insertBefore(askRow, res.firstChild); return; }
       res.innerHTML = '';
+      // a question goes to the assistant first; a keyword search lists topics first
+      var asksQ = askRow && (/\?\s*$/.test(inp.value) || /^(what|why|how|when|which|who|explain|describe|define|difference|compare|list|write|solve|find|calculate|derive)\b/i.test(inp.value.trim()) || inp.value.trim().split(/\s+/).length >= 4);
+      if (asksQ) res.appendChild(askRow);
       r.forEach(function (x) {
         var a = U.el('a', { href: '#' + x.e.id, class: 'layer-' + x.e.ch.layer });
         a.innerHTML = '<span class="where">' + esc(x.e.ch.part === 'X' ? x.e.ch.title : 'Ch ' + x.e.ch.num + ' · ' + x.e.ch.short) + '</span><span class="t">' + hl(x.e.title, x.terms) + '</span><span class="s">' + hl(x.snip, x.terms) + '</span>';
         a.addEventListener('click', close);
         res.appendChild(a);
       });
+      if (askRow && !asksQ) res.appendChild(askRow);
     }, 120));
     inp.addEventListener('keydown', function (e) {
       var items = res.querySelectorAll('a');
@@ -607,7 +620,7 @@
         sel = U.clamp(sel + (e.key === 'ArrowDown' ? 1 : -1), 0, items.length - 1);
         items.forEach(function (a, i) { a.classList.toggle('sel', i === sel); });
         if (items[sel]) items[sel].scrollIntoView({ block: 'nearest' });
-      } else if (e.key === 'Enter') { var t = items[Math.max(0, sel)]; if (t) { location.hash = t.getAttribute('href').slice(1); close(); } }
+      } else if (e.key === 'Enter') { var t = items[Math.max(0, sel)]; if (t) { if (t.classList.contains('ask-row')) t.click(); else { location.hash = t.getAttribute('href').slice(1); close(); } } }
       else if (e.key === 'Escape') close();
     });
     document.addEventListener('keydown', function (e) {

@@ -33,6 +33,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
     <span class="label">Search topics, formulas…</span><kbd>/</kbd>
   </button>
+  <button class="icon-btn ask-btn" id="ask-btn" type="button" data-open-assistant aria-controls="ai-drawer" aria-expanded="false" aria-label="Open the study assistant">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-8l-5 4v-4H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M12 6.6l1 2.4 2.4 1-2.4 1-1 2.4-1-2.4-2.4-1 2.4-1z" fill="currentColor" stroke="none"/></svg>
+    <span class="label">Ask</span>
+  </button>
   <button class="icon-btn" id="theme-btn" type="button" aria-label="Change theme">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
     <span id="theme-label" class="small">Auto</span>
@@ -68,6 +72,10 @@
         <a class="btn ghost" href="#questions">IA question bank</a>
         <a class="btn ghost" href="#formulas">Formula sheet</a>
       </div>
+      <form class="hero-ask" data-ask-form role="search" aria-label="Ask the study assistant">
+        <input type="text" name="q" placeholder="Ask anything in your syllabus…" aria-label="Ask the study assistant" autocomplete="off">
+        <button class="btn" type="submit">Ask</button>
+      </form>
       <div class="stat-row">
         <span><b>13</b>chapters</span>
         <span><b data-topic-count>—</b>topics</span>
@@ -154,6 +162,7 @@
       <p>Revision tools that cut across chapters.</p>
     </div>
     <div class="tool-grid">
+      <a class="tool-card ai-card" href="#assistant"><b>Study assistant</b><span>Ask any question and get an answer written from your notes, with a clickable source for every point.</span></a>
       <a class="tool-card" href="#formulas"><b>Formula sheet &amp; numericals</b><span>Every formula with units, plus calculators that show the working.</span></a>
       <a class="tool-card" href="#questions"><b>Exam question bank</b><span>IA-1 solved paper, IA-2 important questions and likely long answers.</span></a>
       <a class="tool-card" href="#quiz"><b>Mixed test</b><span>195 shuffled MCQs across all chapters, with the reasoning after each answer.</span></a>
@@ -190,5 +199,8 @@
 <script src="js/ch/x-questions.js"></script>
 <script src="js/ch/x-quiz.js"></script>
 <script src="js/ch/x-lab.js"></script>
+<script src="js/ch/x-assistant.js"></script>
+<script src="js/rag.js"></script>
+<script src="js/assistant.js"></script>
 </body>
 </html>
