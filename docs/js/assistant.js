@@ -479,7 +479,7 @@
     if (t.corrected && t.corrected.length) und.push('fixed spelling: ' + t.corrected.map(c => '“' + c.from + '” → “' + c.to + '”').join(', '));
     if (t.expanded && t.expanded.length) und.push('also searched: ' + t.expanded.slice(0, 6).join(', '));
     if (t.intent && t.intent.length) und.push('question type: ' + t.intent.join(', '));
-    if (t.rewritten) und.push('read the follow-up as “' + R.util.trimWords(t.rewritten, 16) + '”');
+    if (t.rewritten) und.push((t.restyle ? 'same topic as before, so searched for “' : 'read the follow-up as “') + R.util.trimWords(t.rewritten, 16) + '”');
     if (t.ctxFrom) und.push('treated as a follow-up to “' + R.util.trimWords(t.ctxFrom, 12) + '”');
     ol.appendChild(el('li', { html: '<b>Understood</b> ' + esc(und.length ? und.join('; ') : 'the question as written') + '.' }));
     ol.appendChild(el('li', { html: '<b>Searched</b> ' + (t.N || '') + ' passages in ' + (t.ms || 0) + ' ms: keyword ranking (BM25F, headings count extra) and meaning vectors, fused by rank' + (t.scope && t.scope !== 'all' ? ', only in ' + esc(scopeName(t.scope)) : '') + '.' }));
@@ -540,7 +540,7 @@
     for (let i = 0; i < S.msgs.length; i++) {
       const m = S.msgs[i];
       if (m === before) break;
-      if (m.role === 'ai' && m.text && !m.error && !m.quiz && m.via !== 'chat') out.push({ q: m.q, a: splitFU(m.text).body.replace(CITE, '').replace(/[ \t]+\n/g, '\n') });
+      if (m.role === 'ai' && m.text && !m.error && !m.quiz && m.via !== 'chat') out.push({ q: m.q, sq: m.searchQ || m.q, a: splitFU(m.text).body.replace(CITE, '').replace(/[ \t]+\n/g, '\n') });
     }
     return out.slice(-3);
   }
@@ -592,6 +592,7 @@
       if (am.mode === 'quiz') r = await R.quiz(common);
       else r = await R.ask(Object.assign(common, { mode: am.mode, marks: am.marks, deep: am.deep, history: history(am), prev: prevQuestion(am), onText }));
       am.sources = (r.sources || []).map(srcView);
+      am.searchQ = r.searchQ || am.q;
       am.via = r.via; am.model = r.model || ''; am.note = r.note || ''; am.error = r.error || null; am.cancelled = !!r.cancelled; am.truncated = !!r.truncated;
       if (r.questions) {
         if (r.questions.length) am.quiz = { questions: r.questions, html: !!r.html };
@@ -601,7 +602,7 @@
       const an = r.an;
       if (an) {
         const lab = new Map((r.sources || []).map(x => [x.c.id, x.label]));
-        am.trace = { rewritten: an.rewritten || '', corrected: an.corrected, expanded: an.expanded, intent: Object.keys(an.intent || {}), ctxFrom: an.ctxFrom, ms: an.ms, N: R.stats && R.stats.passages, scope: an.scope, steps, top: (an.results || []).slice(0, 8).map(x => ({ title: R.title(x.c), where: R.where(x.c), type: x.c.type, rb: x.rb, rv: x.rv, label: lab.get(x.c.id) || '' })) };
+        am.trace = { rewritten: an.rewritten || '', restyle: !!an.restyle, corrected: an.corrected, expanded: an.expanded, intent: Object.keys(an.intent || {}), ctxFrom: an.ctxFrom, ms: an.ms, N: R.stats && R.stats.passages, scope: an.scope, steps, top: (an.results || []).slice(0, 8).map(x => ({ title: R.title(x.c), where: R.where(x.c), type: x.c.type, rb: x.rb, rv: x.rv, label: lab.get(x.c.id) || '' })) };
       }
     } catch (e) {
       am.error = 'upstream_error'; am.note = 'Something went wrong while answering' + (e && e.message ? ' (' + e.message + ')' : '') + '. Press Retry.';

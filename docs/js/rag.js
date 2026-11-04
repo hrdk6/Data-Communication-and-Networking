@@ -809,6 +809,17 @@
     return null;
   };
 
+  /* ---------------------------------------------------------------- "say it again, but simpler": same topic, new style */
+  const RESTYLE = /\b(like (i|im|i'm|i am|a|an|you('| a)?re talking|for)\b|eli5|simpl(er|ify|e|y)|easier|easy (words|way|language)|plain (words|english)|in (my|your|easy|simple|plain|short|brief|detail|depth|points|hindi|kannada|telugu|tamil)\b|shorter|briefer?|longer|more (detail|details|depth|examples?)|detailed|elaborate|expand|deeper|step by step|example|analogy|again|rephrase|reword|tl;?dr|summar(y|i[sz]e)|layman|beginner|kid|child|\d+ ?(year|yr)s?[- ]?old|year old|i (still )?(don'?t|do not) (get|understand)|confus(ed|ing)|clearer|clarify|not clear|(make|put) it|\bmore\b|go on|continue|keep going)/i;
+  const STYLE = new Set('like am im explain explainme explaining tell teach show make put give write say sound understand understood understanding get got want need please pls more less much little bit simple simpler simply easy easier easily short shorter brief briefly detail details detailed depth deeper elaborate expand example examples analogy again rephrase reword summary summarise summarize layman beginner kid kids child children old year years yr age plain words word english hindi kannada telugu tamil way ways clear clearer clarify confused confusing step steps point points one thing same topic still dont don know knew okay yes'.split(' '));
+  R.isRestyle = function (q) {
+    const ix = R.ensure(), t = fold(q);
+    if (!RESTYLE.test(t)) return false;
+    const topical = (t.match(/[a-z][a-z0-9]{2,}/g) || []).filter(w => !STOP.has(w) && !STYLE.has(w) && tokens(w).some(x => ix.vocab.has(x)));
+    return topical.length === 0;
+  };
+  const RESTYLE_LINE = 'The student wants the SAME topic as the earlier question, written in the style they ask for (simpler words, shorter, longer, with an example, step by step, and so on). Keep every fact from SOURCES and keep the [S#] citations. A short everyday analogy is welcome when it makes a fact easier to see: introduce it with "Analogy:" and cite the fact it illustrates.';
+
   /* ---------------------------------------------------------------- follow-ups rewritten into a standalone search query */
   async function standalone(o) {
     const h = (o.history || []).slice(-2);
@@ -916,7 +927,7 @@
       user('EARLIER QUESTION: ' + h.q);
       t.push({ role: 'assistant', content: h.a.slice(0, 1800) });
     });
-    user('SOURCES:\n\n' + sourcesText(reg.list) + '\n\nMODE: ' + modeLine(o.mode, o.marks) + '\n\nQUESTION: ' + o.q);
+    user('SOURCES:\n\n' + sourcesText(reg.list) + '\n\nMODE: ' + (o.restyle ? RESTYLE_LINE : modeLine(o.mode, o.marks)) + '\n\nQUESTION: ' + o.q + (o.restyle && o.topic ? '\n(Topic from the earlier question: ' + o.topic + ')' : ''));
     return t;
   }
   function groqTurns(o, reg) {
@@ -927,7 +938,7 @@
       t.push({ role: 'user', content: h.q });
       t.push({ role: 'assistant', content: h.a.slice(0, 900) });
     });
-    t.push({ role: 'user', content: 'SOURCES:\n\n' + sourcesText(reg.list, 1900) + '\n\nMODE: ' + modeLine(o.mode, o.marks) + '\n\nQUESTION: ' + o.q });
+    t.push({ role: 'user', content: 'SOURCES:\n\n' + sourcesText(reg.list, 1900) + '\n\nMODE: ' + (o.restyle ? RESTYLE_LINE : modeLine(o.mode, o.marks)) + '\n\nQUESTION: ' + o.q + (o.restyle && o.topic ? '\n(Topic from the earlier question: ' + o.topic + ')' : '') });
     return t;
   }
   function searchTools(o, reg) {
@@ -964,12 +975,17 @@
     const chat = R.smalltalk(o.q);
     if (chat) return chat;
     let sq = null;
-    if (R.groq.state === 'ready' && (o.history || []).length) {
+    const last = (o.history || []).slice(-1)[0];
+    o.restyle = !!(last && R.isRestyle(o.q));
+    if (o.restyle) {
+      sq = last.sq || last.q; // same topic as before: search for that, not for the style words
+    } else if (R.groq.state === 'ready' && (o.history || []).length) {
       if (o.onStatus) o.onStatus('Working out what your follow-up refers to…');
       sq = await standalone(o);
     }
     const an = R.search(sq || o.q, { scope: o.scope, mode: o.mode, prev: sq ? null : o.prev });
-    if (sq) { an.rewritten = sq; an.q = o.q; }
+    if (sq) { an.rewritten = sq; an.q = o.q; an.restyle = !!o.restyle; }
+    o.topic = o.restyle ? sq : '';
     if (an.oos && !o.deep) {
       const near = R.followups(an, []);
       return { text: 'Your notes do not cover **' + an.unknown.slice(0, 4).join(', ') + '**. This guide holds only your DCN syllabus, so there is nothing to answer from.' + (near.length ? ' The closest topics it does cover are below.' : ''), via: 'notes', note: '', sources: [], an, followups: near, oos: true };
@@ -977,7 +993,7 @@
     const k = o.mode === 'exam' ? 8 : o.mode === 'revise' ? 7 : 6;
     const reg = registry(widen(R.select(an, k), k + 2));
     if (o.onSources) o.onSources(reg.list, an);
-    const offline = note => ({ text: R.compose(an, reg.list, o), via: 'notes', note: note || '', sources: reg.list, an, followups: R.followups(an, reg.list) });
+    const offline = note => ({ text: R.compose(an, reg.list, o), via: 'notes', note: note || (o.restyle ? 'Notes mode cannot reword an answer, so here are the key points of the same topic again.' : ''), sources: reg.list, an, followups: R.followups(an, reg.list), searchQ: sq || o.q });
     // 1. Groq
     if (R.groq.state === 'ready') {
       if (!reg.list.length) return offline();
@@ -990,7 +1006,7 @@
           onText: t => { partial = t; if (o.onText) o.onText(t); }
         });
         if (!res.text) throw { code: 'empty_completion', note: 'No answer came back. Press Retry.' };
-        return { text: res.text, model: prettyModel(res.model), via: 'groq', sources: reg.list, an };
+        return { text: res.text, model: prettyModel(res.model), via: 'groq', sources: reg.list, an, searchQ: sq || o.q };
       } catch (e) {
         if ((o.signal && o.signal.aborted) || (e && (e.name === 'AbortError' || e.code === 'cancelled'))) return { text: partial, via: 'groq', cancelled: true, sources: reg.list, an };
         if (e && e.code === 'bad_key') { R.groq.state = 'bad_key'; R.groq.reason = e.note; status(); }
@@ -1009,7 +1025,7 @@
     if (o.onStatus) o.onStatus(o.deep && cl.tools ? 'Claude is planning which notes to read…' : 'Claude is reading ' + reg.list.length + ' passages from your notes…');
     try {
       const res = await cl.sample(turns(o, reg), opts);
-      return { text: res.text, truncated: res.truncated, tier: res.modelTierApplied, via: 'claude', sources: reg.list, an };
+      return { text: res.text, truncated: res.truncated, tier: res.modelTierApplied, via: 'claude', sources: reg.list, an, searchQ: sq || o.q };
     } catch (e) {
       const code = e && e.code;
       if (code === 'cancelled') return { text: (e.text || '').trim(), via: 'claude', cancelled: true, sources: reg.list, an };
