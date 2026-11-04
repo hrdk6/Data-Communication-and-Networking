@@ -493,6 +493,15 @@
     });
     out.sort((a, b) => b.score - a.score);
     an.results = out.slice(0, 40);
+    // how well do the best passages cover the question? (used to decide notes answer vs general answer)
+    const cids = (an.core || []).map(t => ix.vocab.get(t)), tot = cids.reduce((a, id) => a + ix.idf[id], 0);
+    let body = 0, title = 0;
+    if (tot > 0) an.results.slice(0, 5).forEach((r, i) => {
+      const have = new Set(r.c._t);
+      body = Math.max(body, cids.reduce((a, id) => a + (have.has(id) ? ix.idf[id] : 0), 0) / tot);
+      if (i < 3) title = Math.max(title, an.core.reduce((a, t, j) => a + (r.c._tt.has(t) ? ix.idf[cids[j]] : 0), 0) / tot);
+    });
+    an.cov = { body, title, bm: an.results[0] ? an.results[0].bm : 0 };
     an.ms = Math.round(performance.now() - t0);
     return an;
   };
@@ -886,9 +895,9 @@
       'You are the study assistant inside "Signal to Socket", a study guide for Data Communication and Networking (VTU BCS502, taught at BMSIT&M). The student revises only from this guide, and the guide was written only from their syllabus files, so stay inside it.',
       '',
       'Rules:',
-      '1. Use only the SOURCES passages' + (deep ? ' and the passages you fetch with search_notes or read_section' : '') + '. Do not add facts, protocols, numbers or examples that are not in them. If they do not cover the question, say so in one sentence, name the closest topic they do cover, and stop.',
+      '1. Answer from the SOURCES passages' + (deep ? ' and the passages you fetch with search_notes or read_section' : '') + '. Do not invent facts, protocols, numbers or examples about the syllabus topic that they do not contain. If the question goes beyond them, answer the part they cover first, then add a short last paragraph that starts with "Beyond your notes:" and gives the extra explanation from your general knowledge (brief, accurate, no citations in it). If they do not cover the question at all, say so in one sentence and name the closest topic they do cover.',
       '2. Cite the source label after every sentence or bullet that uses it, in square brackets: [S2] or [S1][S4]. Use only labels you were given. Never invent a label.',
-      '3. Write for an engineering student preparing for an internal test or the VTU exam: exact terms, short sentences, no filler, no greetings.',
+      '3. Write like a friendly, patient tutor for an engineering student preparing for an internal test or the VTU exam: plain words first, then the exact exam terms; short sentences, no padding.',
       '4. Format with Markdown: short paragraphs, "-" bullets or numbered lists, **bold** key terms, a table for comparisons. Use "###" headings only for exam answers. No HTML, no links, no emoji.',
       '5. Formulas inline with plain symbols, for example S = G × e^(−2G) or N = 2^(32 − n). For numericals: formula, then substitution with units, then the boxed answer in bold.',
       '6. Where a diagram is expected, give a labelled step list or a small ASCII sketch in a ``` code block, and mention the guide\'s lab or figure if a source names one.',
@@ -969,32 +978,145 @@
       }
     }];
   }
+  /* ---------------------------------------------------------------- chat: answers from general knowledge when the notes do not cover the question */
+  const GENERAL_RULES = [
+    'You are the friendly study assistant inside "Signal to Socket", a study guide for Data Communication and Networking (VTU BCS502, BMSIT&M). You are the student\'s personal tutor: warm, patient, encouraging and happy to explain anything.',
+    '',
+    'Rules:',
+    '1. Answer the question properly from your own knowledge. Any subject is fine: networking beyond the syllabus, other college subjects, programming, careers, exam strategy, everyday curiosity. Be accurate. If you are not sure, say so plainly instead of guessing.',
+    '2. Teach, do not just tell: begin with the idea in plain words, then build up with a simple example or an everyday analogy. Show problems step by step. For a hard topic, finish with one quick question for the student to try, only when it helps.',
+    '3. Match the student\'s level and tone. If they say "like I\'m 12", really simplify. If they write casually, reply casually and warmly. A greeting or thanks gets a short, friendly reply that invites the next question.',
+    '4. This answer is from general knowledge, not from the student\'s notes, so do not cite sources. If RELATED NOTES are listed, add one short line pointing the student to them, such as "Your notes cover this under [S1]". If it is a networking topic that is not in the syllabus, say it is outside the syllabus so it is unlikely to be asked in the exam.',
+    '5. Format with Markdown: short paragraphs, bullets, **bold** key terms, a table for comparisons, ``` blocks for code or ASCII diagrams. No HTML. No emoji unless the student uses them.',
+    '6. End with one line that starts with "Follow-ups:" and gives two or three short follow-up questions or next steps separated by " | ".'
+  ].join('\n');
+  function relatedText(list) {
+    return list.length ? '\n\nRELATED NOTES (point to them with their label; do not quote them):\n' + list.map(x => '[' + x.label + '] ' + where(x.c)).join('\n') : '';
+  }
+  function generalGroqTurns(o, reg) {
+    const t = [{ role: 'system', content: GENERAL_RULES }];
+    (o.history || []).slice(-3).forEach(h => {
+      if (!h.q || !h.a) return;
+      t.push({ role: 'user', content: h.q });
+      t.push({ role: 'assistant', content: h.a.slice(0, 1200) });
+    });
+    t.push({ role: 'user', content: o.q + relatedText(reg.list) });
+    return t;
+  }
+  function generalTurns(o, reg) {
+    const t = [];
+    const user = c => { const last = t[t.length - 1]; if (last && last.role === 'user') last.content += '\n\n' + c; else t.push({ role: 'user', content: c }); };
+    user(GENERAL_RULES);
+    (o.history || []).slice(-3).forEach(h => {
+      if (!h.q || !h.a) return;
+      user('EARLIER QUESTION: ' + h.q);
+      t.push({ role: 'assistant', content: h.a.slice(0, 1200) });
+    });
+    user('QUESTION: ' + o.q + relatedText(reg.list));
+    return t;
+  }
+  const llmReady = () => R.groq.state === 'ready' || (R.claude.state === 'ready' && !!R.claude.sample);
+  // decide: answer from the notes, or chat from general knowledge?
+  async function route(o, an, chat) {
+    if (chat) return { route: 'general', why: 'chat' };
+    if (o.restyle && o.lastRoute) return { route: o.lastRoute, why: 'same topic as your last question' };
+    if (o.scope && o.scope !== 'all') return { route: 'notes', why: 'you limited the search to part of the guide' };
+    if (an.oos) return { route: 'general', why: 'the notes never mention these words' };
+    const c = an.cov;
+    if (c.bm >= 17 && c.body >= 0.5) return { route: 'notes', why: 'strong match in the notes' };
+    if (c.bm < 7) return { route: 'general', why: 'no real match in the notes' };
+    const guess = c.bm >= 11 && c.title >= 0.3 ? 'notes' : 'general';
+    const top = an.results.slice(0, 3).map((r, i) => (i + 1) + ') ' + where(r.c)).join('\n');
+    const prompt = 'You route questions for a Data Communication and Networking study guide. Student question: "' + clean(an.q) + '"\nClosest places in the guide:\n' + top + '\nDoes the guide actually teach what the student asks? Reply with one word: NOTES if those places cover it, GENERAL if the question is about something else or goes well beyond them.';
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 4500);
+    const stop = () => ctrl.abort();
+    if (o.signal) o.signal.addEventListener('abort', stop);
+    try {
+      let text = '';
+      if (R.groq.state === 'ready') text = (await groqCall({ task: 'rewrite', stream: false, temperature: 0, max_tokens: 6, messages: [{ role: 'user', content: prompt }] }, { signal: ctrl.signal })).text;
+      else text = (await R.claude.sample(prompt, { modelTier: 'quick', cache: false, signal: ctrl.signal })).text;
+      const v = /GENERAL/i.test(text) ? 'general' : /NOTES/i.test(text) ? 'notes' : guess;
+      return { route: v, why: 'a quick check of the closest passages' };
+    } catch (e) {
+      return { route: guess, why: 'closest passages' };
+    } finally {
+      clearTimeout(timer);
+      if (o.signal) o.signal.removeEventListener('abort', stop);
+    }
+  }
+  const GENERAL_TOKENS = { exam: 1500, revise: 1000, numerical: 1200, explain: 1100 };
+
   R.ask = async function (o) {
     // o: {q, mode, marks, scope, deep, tier, history, prev, signal, onText, onStatus, onSources}
     R.ensure();
+    const ready = llmReady();
     const chat = R.smalltalk(o.q);
-    if (chat) return chat;
+    if (chat && !ready) return chat;
     let sq = null;
     const last = (o.history || []).slice(-1)[0];
-    o.restyle = !!(last && R.isRestyle(o.q));
+    o.restyle = !!(last && !chat && R.isRestyle(o.q));
+    o.lastRoute = last ? (last.general ? 'general' : 'notes') : null;
     if (o.restyle) {
       sq = last.sq || last.q; // same topic as before: search for that, not for the style words
-    } else if (R.groq.state === 'ready' && (o.history || []).length) {
+    } else if (R.groq.state === 'ready' && last && !last.general && !chat) {
       if (o.onStatus) o.onStatus('Working out what your follow-up refers to…');
       sq = await standalone(o);
     }
-    const an = R.search(sq || o.q, { scope: o.scope, mode: o.mode, prev: sq ? null : o.prev });
+    const an = R.search(chat ? '' : (sq || o.q), { scope: o.scope, mode: o.mode, prev: sq || chat ? null : o.prev });
     if (sq) { an.rewritten = sq; an.q = o.q; an.restyle = !!o.restyle; }
     o.topic = o.restyle ? sq : '';
-    if (an.oos && !o.deep) {
-      const near = R.followups(an, []);
-      return { text: 'Your notes do not cover **' + an.unknown.slice(0, 4).join(', ') + '**. This guide holds only your DCN syllabus, so there is nothing to answer from.' + (near.length ? ' The closest topics it does cover are below.' : ''), via: 'notes', note: '', sources: [], an, followups: near, oos: true };
+    const dec = ready ? await route(o, an, !!chat) : { route: 'notes', why: '' };
+    an.route = dec;
+    const searchQ = sq || o.q;
+
+    // ---- general knowledge, in a friendly tutor voice
+    if (ready && dec.route === 'general') {
+      // point to the closest notes when there is a related topic
+      const rel = !chat && an.cov && an.cov.title >= 0.5 ? R.select(an, 3) : [];
+      const reg = registry(rel);
+      if (o.onSources) o.onSources(reg.list, an);
+      const done = (r, extra) => Object.assign({ general: true, sources: reg.list, an, searchQ, route: dec }, r, extra);
+      if (R.groq.state === 'ready') {
+        if (o.onStatus) o.onStatus('Thinking…');
+        let partial = '';
+        try {
+          const res = await groqCall({ messages: generalGroqTurns(o, reg), stream: true, temperature: 0.5, max_tokens: GENERAL_TOKENS[o.mode] || 1100 }, {
+            signal: o.signal,
+            onModel: m => { if (o.onStatus) o.onStatus('Writing with ' + prettyModel(m) + '…'); },
+            onText: t => { partial = t; if (o.onText) o.onText(t); }
+          });
+          if (!res.text) throw { code: 'empty_completion', note: 'No answer came back. Press Retry.' };
+          return done({ text: res.text, model: prettyModel(res.model), via: 'groq' });
+        } catch (e) {
+          if ((o.signal && o.signal.aborted) || (e && (e.name === 'AbortError' || e.code === 'cancelled'))) return done({ text: partial, via: 'groq', cancelled: true });
+          if (e && e.code === 'bad_key') { R.groq.state = 'bad_key'; R.groq.reason = e.note; status(); }
+          return done({ text: partial, via: 'groq', error: (e && e.code) || 'all_failed', note: (e && e.note) || R.errorText(e && e.code) });
+        }
+      }
+      const cl = R.claude;
+      if (o.onStatus) o.onStatus('Thinking…');
+      try {
+        const res = await cl.sample(generalTurns(o, reg), { signal: o.signal, modelTier: tierFor(o.tier), cache: false, onText: u => { if (o.onText) o.onText(u.text); } });
+        return done({ text: res.text, truncated: res.truncated, tier: res.modelTierApplied, via: 'claude' });
+      } catch (e) {
+        const code = e && e.code;
+        if (code === 'cancelled') return done({ text: (e.text || '').trim(), via: 'claude', cancelled: true });
+        if (PERMANENT.has(code)) { cl.state = 'declined'; cl.reason = R.errorText(code); status(); }
+        return done({ text: (e && e.text) || '', via: 'claude', error: code || 'upstream_error', note: R.errorText(code) });
+      }
     }
+
+    // ---- notes mode with no model: cannot chat
+    if (an.oos && !ready) {
+      const near = R.followups(an, []);
+      return { text: 'I can only answer from your notes right now, and they do not cover **' + an.unknown.slice(0, 4).join(', ') + '**.' + (near.length ? ' The closest topics they do cover are below.' : '') + ' To chat about anything else, the assistant needs its AI connection (a Groq key on the website, or Claude when the guide is opened on claude.ai).', via: 'notes', note: '', sources: [], an, followups: near, oos: true, route: dec };
+    }
+
+    // ---- answer from the notes
     const k = o.mode === 'exam' ? 8 : o.mode === 'revise' ? 7 : 6;
     const reg = registry(widen(R.select(an, k), k + 2));
     if (o.onSources) o.onSources(reg.list, an);
-    const offline = note => ({ text: R.compose(an, reg.list, o), via: 'notes', note: note || (o.restyle ? 'Notes mode cannot reword an answer, so here are the key points of the same topic again.' : ''), sources: reg.list, an, followups: R.followups(an, reg.list), searchQ: sq || o.q });
-    // 1. Groq
+    const offline = note => ({ text: R.compose(an, reg.list, o), via: 'notes', note: note || (o.restyle ? 'Notes mode cannot reword an answer, so here are the key points of the same topic again.' : ''), sources: reg.list, an, followups: R.followups(an, reg.list), searchQ, route: dec });
     if (R.groq.state === 'ready') {
       if (!reg.list.length) return offline();
       if (o.onStatus) o.onStatus('Reading ' + reg.list.length + ' passages from your notes…');
@@ -1006,17 +1128,16 @@
           onText: t => { partial = t; if (o.onText) o.onText(t); }
         });
         if (!res.text) throw { code: 'empty_completion', note: 'No answer came back. Press Retry.' };
-        return { text: res.text, model: prettyModel(res.model), via: 'groq', sources: reg.list, an, searchQ: sq || o.q };
+        return { text: res.text, model: prettyModel(res.model), via: 'groq', sources: reg.list, an, searchQ, route: dec };
       } catch (e) {
-        if ((o.signal && o.signal.aborted) || (e && (e.name === 'AbortError' || e.code === 'cancelled'))) return { text: partial, via: 'groq', cancelled: true, sources: reg.list, an };
+        if ((o.signal && o.signal.aborted) || (e && (e.name === 'AbortError' || e.code === 'cancelled'))) return { text: partial, via: 'groq', cancelled: true, sources: reg.list, an, route: dec };
         if (e && e.code === 'bad_key') { R.groq.state = 'bad_key'; R.groq.reason = e.note; status(); }
-        if (partial && e && e.code === 'upstream_error') return { text: partial, via: 'groq', error: e.code, note: e.note, sources: reg.list, an };
+        if (partial && e && e.code === 'upstream_error') return { text: partial, via: 'groq', error: e.code, note: e.note, sources: reg.list, an, route: dec };
         const off = offline((e && e.note ? e.note : R.errorText(e && e.code)) + ' Until then, here are the closest points from your notes.');
         off.error = (e && e.code) || 'all_failed';
         return off;
       }
     }
-    // 2. Claude runtime (inside a claude.ai artifact)
     const cl = R.claude;
     if (!cl.sample || cl.state !== 'ready') return offline(cl.state === 'declined' ? cl.reason : '');
     if (!reg.list.length && !o.deep) return offline();
@@ -1025,13 +1146,13 @@
     if (o.onStatus) o.onStatus(o.deep && cl.tools ? 'Claude is planning which notes to read…' : 'Claude is reading ' + reg.list.length + ' passages from your notes…');
     try {
       const res = await cl.sample(turns(o, reg), opts);
-      return { text: res.text, truncated: res.truncated, tier: res.modelTierApplied, via: 'claude', sources: reg.list, an, searchQ: sq || o.q };
+      return { text: res.text, truncated: res.truncated, tier: res.modelTierApplied, via: 'claude', sources: reg.list, an, searchQ, route: dec };
     } catch (e) {
       const code = e && e.code;
-      if (code === 'cancelled') return { text: (e.text || '').trim(), via: 'claude', cancelled: true, sources: reg.list, an };
+      if (code === 'cancelled') return { text: (e.text || '').trim(), via: 'claude', cancelled: true, sources: reg.list, an, route: dec };
       if (PERMANENT.has(code)) { cl.state = 'declined'; cl.reason = R.errorText(code); status(); return offline(R.errorText(code)); }
-      if (code === 'refused') return { text: '', via: 'claude', error: code, note: R.errorText(code), sources: reg.list, an };
-      return { text: (e && e.text) || '', via: 'claude', error: code || 'upstream_error', note: R.errorText(code), sources: reg.list, an };
+      if (code === 'refused') return { text: '', via: 'claude', error: code, note: R.errorText(code), sources: reg.list, an, route: dec };
+      return { text: (e && e.text) || '', via: 'claude', error: code || 'upstream_error', note: R.errorText(code), sources: reg.list, an, route: dec };
     }
   };
   function quizItems(data) {
@@ -1048,18 +1169,23 @@
       const hits = an.results.filter(r => r.c.type === 'quiz').slice(0, 5);
       return { questions: hits.map(r => DCN.byId(r.c.ch).quiz[r.c.quiz]), html: true, via: 'notes', note: note || '', sources: registry(hits).list, an };
     };
-    const reg = registry(R.select(Object.assign({}, an, { results: an.results.filter(r => r.c.type !== 'quiz') }), 6));
-    const task = 'TASK: Write 4 multiple-choice questions that test understanding (not trivia) of: ' + o.q + '. Use only the sources. Reply with only a JSON array, no Markdown and no commentary. Each item: {"q": string, "options": [four strings], "answer": index 0-3 of the correct option, "why": one sentence ending with its source label like [S2]}.';
+    let general = false;
+    if (llmReady()) { const dec = await route(o, an, false); general = dec.route === 'general'; an.route = dec; }
+    const reg = general ? registry([]) : registry(R.select(Object.assign({}, an, { results: an.results.filter(r => r.c.type !== 'quiz') }), 6));
+    const task = general
+      ? 'TASK: Write 4 multiple-choice questions that test understanding (not trivia) of: ' + o.q + '. The student\'s notes do not cover this, so use accurate general knowledge. Reply with only a JSON array, no Markdown and no commentary. Each item: {"q": string, "options": [four strings], "answer": index 0-3 of the correct option, "why": one short sentence explaining the answer}.'
+      : 'TASK: Write 4 multiple-choice questions that test understanding (not trivia) of: ' + o.q + '. Use only the sources. Reply with only a JSON array, no Markdown and no commentary. Each item: {"q": string, "options": [four strings], "answer": index 0-3 of the correct option, "why": one sentence ending with its source label like [S2]}.';
+    const srcPart = n => general ? '' : 'SOURCES:\n\n' + sourcesText(reg.list, n) + '\n\n';
     // 1. Groq
-    if (R.groq.state === 'ready' && reg.list.length) {
+    if (R.groq.state === 'ready' && (reg.list.length || general)) {
       if (o.onSources) o.onSources(reg.list, an);
       if (o.onStatus) o.onStatus('Writing questions from ' + reg.list.length + ' passages…');
       try {
-        const res = await groqCall({ stream: false, temperature: 0.3, max_tokens: 1400, messages: [{ role: 'system', content: rules(false).split('\n8.')[0] }, { role: 'user', content: 'SOURCES:\n\n' + sourcesText(reg.list, 1600) + '\n\n' + task }] }, { signal: o.signal });
+        const res = await groqCall({ stream: false, temperature: 0.3, max_tokens: 1400, messages: [{ role: 'system', content: (general ? GENERAL_RULES.split('\n\nRules:')[0] : rules(false).split('\n8.')[0]) }, { role: 'user', content: srcPart(1600) + task }] }, { signal: o.signal });
         const raw = String(res.text || '');
         const i = raw.indexOf('['), j = raw.lastIndexOf(']');
         const qs = i >= 0 && j > i ? quizItems(JSON.parse(raw.slice(i, j + 1))) : [];
-        if (qs.length) return { questions: qs, html: false, via: 'groq', model: prettyModel(res.model), sources: reg.list, an };
+        if (qs.length) return { questions: qs, html: false, via: 'groq', general, model: prettyModel(res.model), sources: reg.list, an, route: an.route };
         return offline('The generated quiz could not be read, so these questions come from your chapter self-tests.');
       } catch (e) {
         if ((o.signal && o.signal.aborted) || (e && e.name === 'AbortError')) return { questions: [], via: 'groq', cancelled: true, sources: reg.list, an };
@@ -1071,9 +1197,9 @@
     if (o.onSources) o.onSources(reg.list, an);
     if (o.onStatus) o.onStatus('Claude is writing questions from ' + reg.list.length + ' passages…');
     try {
-      const qs = quizItems(await cl.sample.json(rules(false).split('\n8.')[0] + '\n\nSOURCES:\n\n' + sourcesText(reg.list) + '\n\n' + task, { signal: o.signal, modelTier: tierFor(o.tier), cache: false }));
+      const qs = quizItems(await cl.sample.json((general ? GENERAL_RULES.split('\n\nRules:')[0] : rules(false).split('\n8.')[0]) + '\n\n' + srcPart() + task, { signal: o.signal, modelTier: tierFor(o.tier), cache: false }));
       if (!qs.length) throw { code: 'invalid_json' };
-      return { questions: qs, html: false, via: 'claude', sources: reg.list, an };
+      return { questions: qs, html: false, via: 'claude', general, sources: reg.list, an, route: an.route };
     } catch (e) {
       const code = e && e.code;
       if (code === 'cancelled') return { questions: [], via: 'claude', cancelled: true, sources: reg.list, an };

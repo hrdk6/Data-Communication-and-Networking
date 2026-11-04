@@ -885,3 +885,8 @@ table.cmp.insp-tab { font-size: .84rem; }
   html { scroll-behavior: auto; }
 }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+
+/* general answers (not from the notes) */
+.ai-via.general { color: var(--tip); }
+.beyond { border-left: 3px solid color-mix(in srgb, var(--tip) 60%, var(--line)); background: color-mix(in srgb, var(--tip) 6%, var(--surface)); border-radius: 0 var(--r-sm) var(--r-sm) 0; padding: 8px 12px 10px; display: grid; gap: .55rem; }
+.beyond-tag { font: 650 .62rem/1.2 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--tip); }

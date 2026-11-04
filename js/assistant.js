@@ -19,10 +19,10 @@
   const TIERS = [['quick', 'Fast'], ['default', 'Standard'], ['complex', 'Thorough']];
   const SUGGEST = [
     { k: 'Exam answer · 10 marks', q: 'Explain TCP connection establishment, data transfer and termination', mode: 'exam', marks: 10 },
-    { k: 'Explain', q: 'What is the difference between pure and slotted ALOHA?', mode: 'explain' },
+    { k: 'Explain simply', q: 'Explain how the internet works like I am 12', mode: 'explain' },
     { k: 'Numerical', q: 'A telephone line has a bandwidth of 3.4 kHz. Find the Shannon capacity for SNR = 30 dB', mode: 'numerical' },
-    { k: 'Explain', q: 'How does DNS resolve a name? Recursive vs iterative', mode: 'explain' },
-    { k: 'Revise', q: 'Line coding: NRZ-L, NRZ-I, RZ and Manchester', mode: 'revise' },
+    { k: 'Plan with me', q: 'Make me a 5-day plan to revise DCN before the exam', mode: 'explain' },
+    { k: 'Curious', q: 'What is a VPN, and is it in my syllabus?', mode: 'explain' },
     { k: 'Quiz me', q: 'Error detection: CRC and checksum', mode: 'quiz' }
   ];
 
@@ -87,8 +87,17 @@
     if (h / ct.size < 0.34) { ctx.stats.weak++; return '<span class="weak" title="Check this point: its wording is not clearly in the cited notes.">' + html + '</span>'; }
     return html;
   }
+  const BEYOND = /^\s*(?:#{1,6}\s*)?[*_]{0,2}beyond your notes[*_]{0,2}\s*:?[*_]{0,2}\s*/i;
   function md(src, ctx) {
-    const lines = String(src || '').replace(/\r/g, '').split('\n');
+    // a closing "Beyond your notes" part comes from general knowledge: shown apart, not grounding-checked
+    const all = String(src || '').replace(/\r/g, '').split('\n');
+    const bi = all.findIndex(l => BEYOND.test(l));
+    if (bi > 0 && !(ctx && ctx.inBeyond)) {
+      const head = md(all.slice(0, bi).join('\n'), ctx);
+      const rest = [all[bi].replace(BEYOND, '')].concat(all.slice(bi + 1)).join('\n');
+      return head + '<div class="beyond"><div class="beyond-tag">Beyond your notes · general knowledge</div>' + md(rest, Object.assign({}, ctx, { check: false, inBeyond: true })) + '</div>';
+    }
+    const lines = all;
     const out = [];
     let para = [], list = null, i = 0;
     const flushPara = () => { if (para.length) { const raw = para.join('\n'); out.push('<p>' + claim(raw, para.map(l => inline(l, ctx)).join('<br>'), ctx) + '</p>'); para = []; } };
@@ -205,7 +214,7 @@
       b.addEventListener('click', () => setMode(m[0]));
       modes.appendChild(b);
     });
-    const ta = el('textarea', { rows: '1', 'aria-label': 'Your question', placeholder: 'Ask about any topic in your syllabus…', spellcheck: 'true' });
+    const ta = el('textarea', { rows: '1', 'aria-label': 'Your question', placeholder: 'Ask me anything…', spellcheck: 'true' });
     const send = el('button', { type: 'submit', class: 'btn ai-send', text: 'Ask' });
     const box = el('div', { class: 'ai-box' }, [ta, send]);
     const scope = el('select', { 'aria-label': 'Search in' });
@@ -264,7 +273,7 @@
     if (!ui) return;
     ui.modes.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === m)));
     ui.marksWrap.hidden = m !== 'exam';
-    ui.ta.placeholder = m === 'quiz' ? 'Which topic should the quiz cover?' : m === 'numerical' ? 'Paste the numerical, with its values…' : m === 'exam' ? 'Paste the exam question…' : 'Ask about any topic in your syllabus…';
+    ui.ta.placeholder = m === 'quiz' ? 'Which topic should the quiz cover?' : m === 'numerical' ? 'Paste the numerical, with its values…' : m === 'exam' ? 'Paste the exam question…' : 'Ask me anything…';
   }
   function ensureUI() {
     if (ui) return ui;
@@ -289,7 +298,7 @@
       ui.pill.title = 'Answers are written by ' + (g.modelName || 'Groq') + (backups.length ? ', with ' + backups.join(', ') + ' as backups when it is busy' : '') + '. Click to use your own Groq key.';
       ui.tierWrap.hidden = true;
       ui.deep.hidden = true;
-      ui.fine.innerHTML = 'Answers come only from this guide\u2019s passages, with a source for every point. If a model is busy or rate-limited, the next one takes over automatically.';
+      ui.fine.innerHTML = 'Syllabus questions are answered from your notes, with a source for every point. Anything else is answered from general knowledge and marked as such. If a model is busy, the next one takes over automatically.';
       return;
     }
     if (g && g.state === 'checking' && c.state === 'checking') {
@@ -347,8 +356,8 @@
   function emptyState() {
     const ch = DCN.byId(DCN.currentChapter && DCN.currentChapter());
     const wrap = el('div', { class: 'ai-empty' });
-    wrap.appendChild(el('h3', { text: 'Ask your notes anything' }));
-    wrap.appendChild(el('p', { class: 'muted', html: 'The assistant searches all 13 chapters, every model answer, worked example and lab in this guide, then answers from those passages only. Each point links to its source, so you can check it and read more.' }));
+    wrap.appendChild(el('h3', { text: 'Hi! What shall we learn today?' }));
+    wrap.appendChild(el('p', { class: 'muted', html: 'I\u2019m your study assistant. For anything in your syllabus I answer from your own notes and link every point to its source. For anything else, I chat and teach from general knowledge and tell you when an answer is not from your notes.' }));
     const sugs = el('div', { class: 'ai-sugs' });
     const list = SUGGEST.slice();
     if (ch && ch.part !== 'X') {
@@ -388,6 +397,8 @@
     const n = (m.sources || []).length;
     if (m.error && !m.text) return '<span class="ai-via err">Could not answer</span>';
     if (m.via === 'chat') return '<span class="ai-via">Study assistant</span>';
+    if (m.general && m.quiz) return '<span class="ai-via general">Quiz · ' + m.quiz.questions.length + ' questions</span><span>' + esc(m.model || 'general knowledge') + ' · not from your notes</span>';
+    if (m.general) return '<span class="ai-via general">' + esc(m.model || (m.via === 'claude' ? 'Claude' : 'Assistant')) + '</span><span>general answer · not from your notes</span>';
     if (m.quiz) return '<span class="ai-via' + (m.via === 'notes' ? ' notes' : '') + '">Quiz · ' + m.quiz.questions.length + ' questions</span><span>' + (m.via === 'notes' ? 'from your self-tests' : 'by ' + esc(m.via === 'groq' ? (m.model || 'Groq') : 'Claude') + ' from ' + n + ' passages') + '</span>';
     if (m.via === 'groq') return '<span class="ai-via">' + esc(m.model || 'Groq') + '</span><span>' + n + ' passages · via Groq</span>';
     if (m.via === 'notes') return '<span class="ai-via notes">From your notes</span><span>' + n + ' passages · notes mode</span>';
@@ -399,7 +410,7 @@
     n.__eye.innerHTML = eyebrow(m);
     if (m.pending && m.status) { n.__status.hidden = false; n.__status.innerHTML = '<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>' + esc(m.status); }
     else n.__status.hidden = true;
-    const ctx = ctxFor(m, final && (m.via === 'claude' || m.via === 'groq') && !m.quiz && !!R.stats);
+    const ctx = ctxFor(m, final && !m.general && (m.via === 'claude' || m.via === 'groq') && !m.quiz && !!R.stats);
     if (m.quiz) { n.__body.innerHTML = ''; n.__body.appendChild(quizNode(m, ctx)); }
     else {
       const sp = splitFU(m.text || '');
@@ -450,7 +461,7 @@
   }
   function sourcesNode(m) {
     const wrap = el('div', { class: 'ai-srcs' });
-    wrap.appendChild(el('div', { class: 'ai-srcs-h', text: 'Sources in your notes · ' + m.sources.length }));
+    wrap.appendChild(el('div', { class: 'ai-srcs-h', text: (m.general ? 'Related in your notes · ' : 'Sources in your notes · ') + m.sources.length }));
     const list = el('div', { class: 'ai-src-list' });
     const used = new Set(m.quiz || m.via === 'notes' ? m.sources.map(s => s.label) : labelsIn(m.text || ''));
     const show = m.sources.filter(s => used.has(s.label)).concat(m.sources.filter(s => !used.has(s.label)));
@@ -482,6 +493,7 @@
     if (t.rewritten) und.push((t.restyle ? 'same topic as before, so searched for “' : 'read the follow-up as “') + R.util.trimWords(t.rewritten, 16) + '”');
     if (t.ctxFrom) und.push('treated as a follow-up to “' + R.util.trimWords(t.ctxFrom, 12) + '”');
     ol.appendChild(el('li', { html: '<b>Understood</b> ' + esc(und.length ? und.join('; ') : 'the question as written') + '.' }));
+    if (m.route) ol.appendChild(el('li', { html: '<b>Decided</b> to ' + (m.general ? 'answer from general knowledge (' : 'answer from your notes (') + esc(m.route.split(' · ')[1] || '') + ').' }));
     ol.appendChild(el('li', { html: '<b>Searched</b> ' + (t.N || '') + ' passages in ' + (t.ms || 0) + ' ms: keyword ranking (BM25F, headings count extra) and meaning vectors, fused by rank' + (t.scope && t.scope !== 'all' ? ', only in ' + esc(scopeName(t.scope)) : '') + '.' }));
     ol.appendChild(el('li', { html: '<b>Picked</b> ' + (m.sources || []).length + ' passages that cover the question without repeating each other (maximal marginal relevance).' }));
     if (t.steps && t.steps.length) ol.appendChild(el('li', { html: '<b>Deep search</b> ' + t.steps.map(esc).join(' · ') }));
@@ -522,7 +534,7 @@
           os.querySelectorAll('.qopt').forEach((y, yi) => { y.disabled = true; if (yi === q.a) y.classList.add('right'); });
           if (!ok) b.classList.add('wrong');
           why.hidden = false;
-          const src = trusted && m.sources[qi] ? ' ' + citeHtml(m.sources[qi].label, ctx) : '';
+          const src = trusted && !m.general && m.sources[qi] ? ' ' + citeHtml(m.sources[qi].label, ctx) : '';
           why.innerHTML = '<b>' + (ok ? 'Correct.' : 'Not quite: the answer is ' + String.fromCharCode(65 + q.a) + '.') + '</b> ' + (trusted ? (q.why || '') : inline(q.why || '', ctx)) + src;
           sc.textContent = 'Score ' + score + ' / ' + qs.length + (done === qs.length ? ' · finished' : '');
         });
@@ -540,7 +552,7 @@
     for (let i = 0; i < S.msgs.length; i++) {
       const m = S.msgs[i];
       if (m === before) break;
-      if (m.role === 'ai' && m.text && !m.error && !m.quiz && m.via !== 'chat') out.push({ q: m.q, sq: m.searchQ || m.q, a: splitFU(m.text).body.replace(CITE, '').replace(/[ \t]+\n/g, '\n') });
+      if (m.role === 'ai' && m.text && !m.error && !m.quiz) out.push({ q: m.q, general: !!m.general, sq: m.searchQ || m.q, a: splitFU(m.text).body.replace(CITE, '').replace(/[ \t]+\n/g, '\n') });
     }
     return out.slice(-3);
   }
@@ -592,7 +604,7 @@
       if (am.mode === 'quiz') r = await R.quiz(common);
       else r = await R.ask(Object.assign(common, { mode: am.mode, marks: am.marks, deep: am.deep, history: history(am), prev: prevQuestion(am), onText }));
       am.sources = (r.sources || []).map(srcView);
-      am.searchQ = r.searchQ || am.q;
+      am.searchQ = r.searchQ || am.q; am.general = !!r.general; am.route = r.route ? r.route.route + ' · ' + r.route.why : '';
       am.via = r.via; am.model = r.model || ''; am.note = r.note || ''; am.error = r.error || null; am.cancelled = !!r.cancelled; am.truncated = !!r.truncated;
       if (r.questions) {
         if (r.questions.length) am.quiz = { questions: r.questions, html: !!r.html };
